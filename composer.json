@@ -5,7 +5,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
-        "afipsdk/afip-php": "^1.0",
+        "afipsdk/afip.php": "^1.0",
         "guzzlehttp/guzzle": "^7.8",
         "laravel/framework": "^11.0",
         "laravel/sanctum": "^4.0",
@@ -60,10 +60,3 @@
         "preferred-install": "dist",
         "sort-packages": true,
         "allow-plugins": {
-            "pestphp/pest-plugin": true,
-            "php-http/discovery": true
-        }
-    },
-    "minimum-stability": "stable",
-    "prefer-stable": true
-}
