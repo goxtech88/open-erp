@@ -35,10 +35,8 @@ RUN apk add --no-cache \
     curl \
     zip \
     unzip \
-    libsoap \
-    openssl \
-    nginx \
-    supervisor
+    openssl
+
 
 # Instalar extensiones PHP necesarias
 RUN docker-php-ext-install \
