@@ -1,0 +1,124 @@
+version: '3.8'
+
+# ==============================================================
+# Open.ERP by Goxtech Labs — Stack para Portainer (BUILD LOCAL)
+# Este compose construye la imagen directamente en el servidor
+# Proxmox CT. No requiere imagen pre-built en GHCR.
+#
+# Redes externas:
+#   postgres → postgres_goxtech_net (172.27.0.0/16)
+#   redis    → redis_default        (172.26.0.0/16)
+#
+# En Portainer: Stack → Repository → Compose path: docker-compose.portainer.yml
+# ==============================================================
+
+services:
+  # ── Aplicación Laravel (PHP-FPM) — Build local ───────────
+  gx_erp_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: gx_erp_app:latest
+    container_name: gx_erp_app
+    restart: always
+    working_dir: /var/www/html
+    entrypoint: [ "/bin/sh", "docker/entrypoint.sh", "php-fpm" ]
+    volumes:
+      - gx_erp_storage:/var/www/html/storage
+      - gx_erp_bootstrap:/var/www/html/bootstrap/cache
+    environment:
+      APP_NAME: "Open.ERP"
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY}
+      APP_URL: ${APP_URL:-http://localhost:8081}
+      APP_TIMEZONE: America/Argentina/Buenos_Aires
+      APP_LOCALE: es
+      CACHE_PREFIX: gx_erp
+
+      DB_CONNECTION: pgsql
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE:-gxerp}
+      DB_USERNAME: ${DB_USERNAME:-goxtech}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_CLIENT: phpredis
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      SESSION_LIFETIME: 120
+      QUEUE_CONNECTION: redis
+
+      AFIP_CUIT: ${AFIP_CUIT:-}
+      AFIP_MODE: ${AFIP_MODE:-homologacion}
+    networks:
+      - gx_erp_net
+      - postgres_goxtech_net
+      - redis_default
+
+  # ── Nginx ────────────────────────────────────────────────
+  gx_erp_nginx:
+    image: nginx:1.25-alpine
+    container_name: gx_erp_nginx
+    restart: always
+    ports:
+      - "${NGINX_PORT:-8081}:80"
+    volumes:
+      - gx_erp_storage:/var/www/html/storage:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - gx_erp_app
+    networks:
+      - gx_erp_net
+
+  # ── Queue Worker ─────────────────────────────────────────
+  gx_erp_queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: gx_erp_app:latest
+    container_name: gx_erp_queue
+    restart: always
+    command: php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
+    working_dir: /var/www/html
+    volumes:
+      - gx_erp_storage:/var/www/html/storage
+    environment:
+      APP_ENV: production
+      APP_KEY: ${APP_KEY}
+      DB_CONNECTION: pgsql
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE:-gxerp}
+      DB_USERNAME: ${DB_USERNAME:-goxtech}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      QUEUE_CONNECTION: redis
+      CACHE_STORE: redis
+    networks:
+      - gx_erp_net
+      - postgres_goxtech_net
+      - redis_default
+
+# ── Redes ────────────────────────────────────────────────────
+networks:
+  gx_erp_net:
+    driver: bridge
+  postgres_goxtech_net:
+    external: true
+  redis_default:
+    external: true
+
+# ── Volúmenes ────────────────────────────────────────────────
+volumes:
+  gx_erp_storage:
+    driver: local
+  gx_erp_bootstrap:
+    driver: local

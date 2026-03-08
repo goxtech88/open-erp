@@ -5,7 +5,8 @@ FROM composer:2.7 AS composer-build
 
 WORKDIR /app
 
-COPY composer.json composer.lock ./
+# Copiar composer.json y composer.lock si existe (wildcard lo hace opcional)
+COPY composer.json composer.loc[k] ./
 
 RUN composer install \
     --optimize-autoloader \
@@ -17,6 +18,7 @@ RUN composer install \
 COPY . .
 
 RUN composer dump-autoload --optimize --no-dev
+
 
 # ==============================================================
 # Stage 2: Imagen final de producción
@@ -65,7 +67,7 @@ COPY . .
 
 # Crear directorios necesarios y ajustar permisos
 RUN mkdir -p storage/logs storage/framework/cache storage/framework/sessions \
-             storage/framework/views bootstrap/cache \
+    storage/framework/views bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache \
     && chown -R www-data:www-data /var/www/html
 
