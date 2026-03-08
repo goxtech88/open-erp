@@ -1,7 +1,7 @@
 version: '3.8'
 
 # ============================================================
-# ERP Laravel - Docker Compose (Desarrollo Local)
+# Open.ERP by Goxtech Labs - Docker Compose (Desarrollo Local)
 # ============================================================
 
 services:
@@ -11,7 +11,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: production
-    container_name: erp_app
+    container_name: gx_erp_app
     restart: unless-stopped
     working_dir: /var/www/html
     volumes:
@@ -20,16 +20,33 @@ services:
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
+      # ── Base de datos ──
+      DB_CONNECTION: pgsql
+      DB_HOST: gx_postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE:-gxerp}
+      DB_USERNAME: ${DB_USERNAME:-goxtech}
+      DB_PASSWORD: ${DB_PASSWORD:-gxlabs_secret}
+      # ── Redis (Cache + Sesiones + Queue) ──
+      REDIS_HOST: gx_redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-gxredis_secret}
+      CACHE_STORE: redis
+      CACHE_PREFIX: gx_erp
+      SESSION_DRIVER: redis
+      QUEUE_CONNECTION: redis
     depends_on:
-      postgres:
+      gx_postgres:
         condition: service_healthy
+      gx_redis:
+        condition: service_started
     networks:
-      - erp_network
+      - gx_network
 
   # ── Nginx (Servidor Web) ──────────────────────────────────
   nginx:
     image: nginx:1.25-alpine
-    container_name: erp_nginx
+    container_name: gx_erp_nginx
     restart: unless-stopped
     ports:
       - "8000:80"
@@ -39,46 +56,48 @@ services:
     depends_on:
       - app
     networks:
-      - erp_network
+      - gx_network
 
   # ── PostgreSQL ────────────────────────────────────────────
-  postgres:
+  gx_postgres:
     image: postgres:16-alpine
-    container_name: erp_postgres
+    container_name: gx_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_DATABASE:-erp_laravel}
-      POSTGRES_USER: ${DB_USERNAME:-erp_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+      POSTGRES_DB: ${DB_DATABASE:-gxerp}
+      POSTGRES_USER: ${DB_USERNAME:-goxtech}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-gxlabs_secret}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - gx_postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${DB_USERNAME:-erp_user}" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USERNAME:-goxtech}" ]
       interval: 5s
       timeout: 5s
       retries: 5
     networks:
-      - erp_network
+      - gx_network
 
-  # ── Redis (Cache y Sesiones) ──────────────────────────────
-  redis:
+  # ── Redis (Cache + Sesiones + Queue) ─────────────────────
+  # Maneja: cache de stock/inventario, sesiones de usuario, jobs async
+  gx_redis:
     image: redis:7-alpine
-    container_name: erp_redis
+    container_name: gx_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    command: >
+      redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-gxredis_secret} --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
-      - redis_data:/data
+      - gx_redis_data:/data
     networks:
-      - erp_network
+      - gx_network
 
 # ── Redes ─────────────────────────────────────────────────
 networks:
-  erp_network:
+  gx_network:
     driver: bridge
 
 # ── Volúmenes ─────────────────────────────────────────────
 volumes:
-  postgres_data:
-  redis_data:
+  gx_postgres_data:
+  gx_redis_data:

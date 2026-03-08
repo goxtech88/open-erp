@@ -1,163 +1,141 @@
 version: '3.8'
 
 # ==============================================================
-# ERP Laravel - Stack de PRODUCCIÓN para Portainer
-# Sube este archivo como un "Stack" en Portainer.
-# Configura las variables de entorno en la UI de Portainer.
+# Open.ERP by Goxtech Labs — Stack PRODUCCIÓN para Portainer
+# Proxmox CT — usa postgres y redis de stacks externos ya existentes
 # ==============================================================
+# Variables requeridas en Portainer → Stack → Environment:
+#   APP_KEY, DB_PASSWORD, REDIS_PASSWORD, DOMAIN
 
 services:
   # ── Aplicación Laravel (PHP-FPM) ──────────────────────────
-  app:
-    image: ghcr.io/${GITHUB_USER}/erp-laravel:latest
-    # O usa tu Docker Hub: ${DOCKERHUB_USER}/erp-laravel:latest
-    container_name: erp_app
+  gx_erp_app:
+    image: ghcr.io/goxtech88/open-erp:latest
+    container_name: gx_erp_app
     restart: always
     working_dir: /var/www/html
+    entrypoint: [ "/bin/sh", "docker/entrypoint.sh", "php-fpm" ]
     volumes:
-      - erp_storage:/var/www/html/storage
-      - erp_bootstrap:/var/www/html/bootstrap/cache
-      # Certificados AFIP (montar desde host)
-      - /opt/erp/certs:/var/www/html/storage/afip:ro
+      - gx_erp_storage:/var/www/html/storage
+      - gx_erp_bootstrap:/var/www/html/bootstrap/cache
+      # Certificados AFIP (montar desde host del Proxmox CT)
+      - /opt/goxtech/erp/certs:/var/www/html/storage/afip:ro
     environment:
-      APP_NAME: ${APP_NAME:-ERP Laravel}
+      APP_NAME: "Open.ERP"
       APP_ENV: production
       APP_DEBUG: "false"
       APP_KEY: ${APP_KEY}
-      APP_URL: ${APP_URL}
+      APP_URL: ${APP_URL:-https://erp.goxtechlabs.com.ar}
       APP_TIMEZONE: America/Argentina/Buenos_Aires
       APP_LOCALE: es
+      CACHE_PREFIX: gx_erp
 
+      # ── PostgreSQL ──────────────────────────────────────────
       DB_CONNECTION: pgsql
-      DB_HOST: postgres
+      DB_HOST: ${DB_HOST:-gx_postgres}
       DB_PORT: 5432
-      DB_DATABASE: ${DB_DATABASE}
-      DB_USERNAME: ${DB_USERNAME}
+      DB_DATABASE: ${DB_DATABASE:-gxerp}
+      DB_USERNAME: ${DB_USERNAME:-goxtech}
       DB_PASSWORD: ${DB_PASSWORD}
 
+      # ── Redis: Cache + Sesiones + Queue ────────────────────
+      # Soluciona queries lentas (1000+ artículos, KPIs de inventario)
+      # Cache de stock: 5 min | Valoración inventario: 15 min | Dashboard: 2 min
+      REDIS_HOST: ${REDIS_HOST:-gx_redis}
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_CLIENT: phpredis
       CACHE_STORE: redis
       SESSION_DRIVER: redis
+      SESSION_LIFETIME: 120
       QUEUE_CONNECTION: redis
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
 
+      # ── Mail ───────────────────────────────────────────────
       MAIL_MAILER: ${MAIL_MAILER:-log}
       MAIL_HOST: ${MAIL_HOST:-}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      MAIL_ENCRYPTION: ${MAIL_ENCRYPTION:-tls}
-      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS}
-      MAIL_FROM_NAME: ${APP_NAME:-ERP Laravel}
+      MAIL_ENCRYPTION: tls
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-erp@goxtechlabs.com.ar}
+      MAIL_FROM_NAME: "Open.ERP Goxtech"
 
+      # ── AFIP ───────────────────────────────────────────────
       AFIP_CUIT: ${AFIP_CUIT:-}
       AFIP_MODE: ${AFIP_MODE:-produccion}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
     networks:
-      - erp_network
+      - gx_erp_net
+      - gx_data_net # red compartida con postgres/redis externos
     healthcheck:
-      test: [ "CMD", "php-fpm", "-t" ]
+      test: [ "CMD-SHELL", "php-fpm -t || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
 
   # ── Nginx (Servidor Web) ──────────────────────────────────
-  nginx:
+  gx_erp_nginx:
     image: nginx:1.25-alpine
-    container_name: erp_nginx
+    container_name: gx_erp_nginx
     restart: always
     ports:
-      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_PORT:-8080}:80"
     volumes:
-      - erp_storage:/var/www/html/storage:ro
+      - gx_erp_storage:/var/www/html/storage:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     labels:
-      # ── Traefik (si lo usás para SSL automático) ──
+      # ── Traefik SSL automático (si lo tenés configurado) ───
       - "traefik.enable=true"
-      - "traefik.http.routers.erp.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.erp.entrypoints=websecure"
-      - "traefik.http.routers.erp.tls.certresolver=letsencrypt"
-      - "traefik.http.services.erp.loadbalancer.server.port=80"
+      - "traefik.http.routers.gx-erp.rule=Host(`${DOMAIN:-erp.goxtechlabs.com.ar}`)"
+      - "traefik.http.routers.gx-erp.entrypoints=websecure"
+      - "traefik.http.routers.gx-erp.tls.certresolver=letsencrypt"
+      - "traefik.http.services.gx-erp.loadbalancer.server.port=80"
     depends_on:
-      - app
+      - gx_erp_app
     networks:
-      - erp_network
-      - traefik_public # red externa de Traefik
+      - gx_erp_net
+      - traefik_public
 
-  # ── PostgreSQL ────────────────────────────────────────────
-  postgres:
-    image: postgres:16-alpine
-    container_name: erp_postgres
+  # ── Queue Worker (procesa jobs async: emails, reportes) ───
+  gx_erp_queue:
+    image: ghcr.io/goxtech88/open-erp:latest
+    container_name: gx_erp_queue
     restart: always
-    environment:
-      POSTGRES_DB: ${DB_DATABASE}
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${DB_USERNAME}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - erp_network
-
-  # ── Redis ─────────────────────────────────────────────────
-  redis:
-    image: redis:7-alpine
-    container_name: erp_redis
-    restart: always
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-secret_redis}
-    volumes:
-      - redis_data:/data
-    networks:
-      - erp_network
-
-  # ── Queue Worker (Jobs Laravel) ───────────────────────────
-  queue:
-    image: ghcr.io/${GITHUB_USER}/erp-laravel:latest
-    container_name: erp_queue
-    restart: always
-    command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+    command: php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
     working_dir: /var/www/html
     volumes:
-      - erp_storage:/var/www/html/storage
+      - gx_erp_storage:/var/www/html/storage
     environment:
       APP_ENV: production
       APP_KEY: ${APP_KEY}
       DB_CONNECTION: pgsql
-      DB_HOST: postgres
+      DB_HOST: ${DB_HOST:-gx_postgres}
       DB_PORT: 5432
-      DB_DATABASE: ${DB_DATABASE}
-      DB_USERNAME: ${DB_USERNAME}
+      DB_DATABASE: ${DB_DATABASE:-gxerp}
+      DB_USERNAME: ${DB_USERNAME:-goxtech}
       DB_PASSWORD: ${DB_PASSWORD}
-      REDIS_HOST: redis
+      REDIS_HOST: ${REDIS_HOST:-gx_redis}
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       QUEUE_CONNECTION: redis
-    depends_on:
-      - postgres
-      - redis
+      CACHE_STORE: redis
     networks:
-      - erp_network
+      - gx_erp_net
+      - gx_data_net
 
 # ── Redes ─────────────────────────────────────────────────
 networks:
-  erp_network:
+  gx_erp_net:
     driver: bridge
+  # Red compartida con los stacks de postgres y redis existentes
+  gx_data_net:
+    external: true
+    name: ${DATA_NETWORK:-postgres_default}
   traefik_public:
-    external: true # red compartida con Traefik
+    external: true
 
 # ── Volúmenes ─────────────────────────────────────────────
 volumes:
-  postgres_data:
+  gx_erp_storage:
     driver: local
-  redis_data:
-    driver: local
-  erp_storage:
-    driver: local
-  erp_bootstrap:
+  gx_erp_bootstrap:
     driver: local
