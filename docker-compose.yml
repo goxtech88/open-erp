@@ -1,5 +1,3 @@
-version: '3.8'
-
 # ============================================================
 # Open.ERP by Goxtech Labs - Docker Compose (Desarrollo Local)
 # ============================================================
@@ -17,6 +15,7 @@ services:
     volumes:
       - .:/var/www/html
       - ./storage:/var/www/html/storage
+      - vendor_data:/var/www/html/vendor
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
@@ -101,3 +100,4 @@ networks:
 volumes:
   gx_postgres_data:
   gx_redis_data:
+  vendor_data:

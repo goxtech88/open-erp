@@ -4,6 +4,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\ArticleController;
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\AfipController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -55,5 +56,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/{invoice}',              [InvoiceController::class, 'update'])->defaults('type', 'purchase')->name('purchases.update');
         Route::delete('/{invoice}',           [InvoiceController::class, 'destroy'])->defaults('type', 'purchase')->name('purchases.destroy');
         Route::post('/{invoice}/authorize',   [InvoiceController::class, 'authorize'])->defaults('type', 'purchase')->name('purchases.authorize');
+    });
+
+    // AFIP — Panel, consulta CUIT, configuración
+    Route::prefix('afip')->name('afip.')->group(function () {
+        Route::get('/',              [AfipController::class, 'index'])->name('index');
+        Route::post('/consultar',    [AfipController::class, 'consultarCuit'])->name('consultar');
+        Route::post('/config',       [AfipController::class, 'updateConfig'])->name('config.update');
+        Route::post('/test',         [AfipController::class, 'testConnection'])->name('test');
     });
 });
