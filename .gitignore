@@ -1,0 +1,70 @@
+# ==============================================================
+# .gitignore para ERP Laravel
+# ==============================================================
+
+# Dependencias
+/vendor/
+/node_modules/
+
+# Variables de entorno (NUNCA subir al repo)
+.env
+.env.backup
+.env.production
+.env.staging
+*.local
+
+# Cache de Laravel
+/bootstrap/cache/*.php
+/storage/*.key
+Homestead.json
+Homestead.yaml
+
+# Storage público (se regenera)
+/public/storage
+/public/hot
+
+# Archivos de sesión, cache, logs
+/storage/app/public/*
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/testing/*
+/storage/framework/views/*
+/storage/logs/*.log
+
+# Certificados AFIP (son secretos, no van al repo)
+/storage/afip/*.crt
+/storage/afip/*.key
+/storage/afip/*.pem
+
+# Herramientas de desarrollo
+.phpunit.result.cache
+.php_cs
+.php_cs.cache
+phpunit.xml
+
+# Sistema operativo
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Build assets
+/public/build/
+/public/css/
+/public/js/
+mix-manifest.json
