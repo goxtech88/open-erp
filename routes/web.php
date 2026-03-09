@@ -65,4 +65,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/config',       [AfipController::class, 'updateConfig'])->name('config.update');
         Route::post('/test',         [AfipController::class, 'testConnection'])->name('test');
     });
+
+    // Factusol — Importación de datos
+    Route::prefix('factusol')->name('factusol.')->group(function () {
+        Route::get('/',         [\App\Http\Controllers\FactusolController::class, 'index'])->name('index');
+        Route::post('/import',  [\App\Http\Controllers\FactusolController::class, 'import'])->name('import');
+        Route::post('/preview', [\App\Http\Controllers\FactusolController::class, 'preview'])->name('preview');
+    });
 });
